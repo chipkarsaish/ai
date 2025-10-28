@@ -1,59 +1,47 @@
-% Initial state
-on(a, table).
-on(b, table).
-on(c, a).
+% Initial and Goal states
+initial_state([on(a, table), on(b, table), on(c, a)]).
+goal_state([on(a, b), on(b, table), on(c, table)]).
 
-% Goal state
-on(a, b).
-on(b, table).
-on(c, table).
+% Check if a block is clear in a given State (no block on top of it)
+clear(Block, State) :-
+    \+ member(on(_, Block), State).
 
-% Define the pickup action
-pickup(Block, From, State, NewState) :-
-    % Preconditions
-    on(Block, From),
-    clear(Block, State),
-    % Effects
-    remove(Block, From, State, TempState),
-    assert(on(Block, agent)),
-    assert(holding(Block, TempState)),
-    retract(State, TempState).
-
-% Define the putdown action
-putdown(Block, To, State, NewState) :-
-    % Preconditions
-    holding(Block, State),
-    % Effects
-    remove(holding(Block, State), State, TempState),
-    assert(on(Block, To)),
-    assert(clear(Block, TempState)),
-    retract(State, TempState).
-
-% Helper predicate to remove a fact from the state
+% Remove a fact from the state list
 remove(Fact, State, NewState) :-
     select(Fact, State, NewState).
 
-% Helper predicate to check if a block is clear
-clear(Block, State) :-
-    \+ on(_, Block, State).
+% Add a fact to the state list if not already present
+add(Fact, State, NewState) :-
+    \+ member(Fact, State),
+    NewState = [Fact | State].
+add(Fact, State, State) :-
+    member(Fact, State).
 
-% Depth-first search
-dfs(State, Goal, _, []) :- State = Goal.
-dfs(State, Goal, Visited, [Action | Plan]) :-
+% Pickup action: pick up Block from From in State producing NewState
+move(State, pickup(Block, From), NewState) :-
+    member(on(Block, From), State),
+    clear(Block, State),
+    remove(on(Block, From), State, TempState),
+    add(holding(Block), TempState, NewState).
+
+% Putdown action: put down Block on To in State producing NewState
+move(State, putdown(Block, To), NewState) :-
+    member(holding(Block), State),
+    clear(To, State),
+    remove(holding(Block), State, TempState),
+    add(on(Block, To), TempState, NewState).
+
+% Depth-first search planner
+dfs(State, Goal, _, []) :-
+    subset(Goal, State). % Goal satisfied if all goal facts are in current state
+
+dfs(State, Goal, Visited, [Action|Plan]) :-
     move(State, Action, NewState),
-    \+ member(NewState, Visited), % Avoid revisiting states
-    dfs(NewState, Goal, [NewState | Visited], Plan).
+    \+ member(NewState, Visited),
+    dfs(NewState, Goal, [NewState|Visited], Plan).
 
 % Main planning predicate
 plan(Plan) :-
     initial_state(InitialState),
-    goal_state(GoalState),
-    dfs(InitialState, GoalState, [InitialState], Plan)
-
-
-------queries-----------
-?- move([on(a,table), on(b,table), on(c,a)], Action, NewState).
-?- plan(Plan).
-?- initial_state(S).
-?- goal_state(G).
-
+    goal_state(Goal),
+    dfs(InitialState, Goal, [InitialState], Plan).
